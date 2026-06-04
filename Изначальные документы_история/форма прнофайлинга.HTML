@@ -1,0 +1,1469 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Профилирование должностей — МГТУ им. Н.Э. Баумана</title>
+<style>
+  @import url('https://fonts.cdnfonts.com/s/84855/Inter.woff2');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --primary: #1a3a6b;
+    --primary-light: #2a5298;
+    --primary-dark: #0f2444;
+    --accent: #e8a838;
+    --accent-light: #f5c563;
+    --bg: #f4f6f9;
+    --card: #ffffff;
+    --text: #1a2332;
+    --text-secondary: #5a6a7e;
+    --border: #e2e8f0;
+    --success: #22c55e;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --chat-user: #eef2ff;
+    --chat-ai: #f8fafc;
+    --radius: 12px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.04);
+    --shadow-lg: 0 4px 20px rgba(0,0,0,0.1);
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    line-height: 1.5;
+  }
+
+  .header {
+    background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 50%, var(--primary-light) 100%);
+    color: white;
+    padding: 0 24px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 2px 12px rgba(26,58,107,0.3);
+    position: relative;
+    z-index: 10;
+    flex-shrink: 0;
+  }
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .logo-badge {
+    width: 36px; height: 36px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.2);
+  }
+
+  .header-title {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+
+  .header-subtitle {
+    font-size: 11px;
+    opacity: 0.7;
+    margin-top: 1px;
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .progress-overall {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    opacity: 0.9;
+  }
+
+  .progress-bar-mini {
+    width: 120px;
+    height: 6px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .progress-bar-mini-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 3px;
+    transition: width 0.6s ease;
+    width: 0%;
+  }
+
+  .header-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    opacity: 0.8;
+  }
+
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--success);
+    box-shadow: 0 0 6px var(--success);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  .main {
+    display: grid;
+    grid-template-columns: 260px 1fr 380px;
+    height: calc(100vh - 56px);
+    gap: 0;
+    overflow: hidden;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    background: var(--card);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 16px 0;
+    min-height: 0;
+  }
+
+  .sidebar::-webkit-scrollbar { width: 4px; }
+  .sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  .sidebar-title {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    padding: 0 20px 12px;
+  }
+
+  .section-item {
+    padding: 10px 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: all 0.2s;
+    border-left: 3px solid transparent;
+    position: relative;
+  }
+
+  .section-item:hover {
+    background: #f8fafc;
+  }
+
+  .section-item.active {
+    background: #eef2ff;
+    border-left-color: var(--primary);
+  }
+
+  .section-item.completed .section-num {
+    background: var(--success);
+    color: white;
+  }
+
+  .section-item.current .section-num {
+    background: var(--primary);
+    color: white;
+    box-shadow: 0 0 0 3px rgba(26,58,107,0.15);
+  }
+
+  .section-num {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+    transition: all 0.3s;
+  }
+
+  .section-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .section-name {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .section-status {
+    font-size: 10px;
+    color: var(--text-secondary);
+    margin-top: 1px;
+  }
+
+  .section-item.completed .section-status { color: var(--success); }
+  .section-item.current .section-status { color: var(--primary); }
+
+  .sidebar-footer {
+    padding: 16px 20px;
+    border-top: 1px solid var(--border);
+    margin-top: 8px;
+  }
+
+  .btn-export {
+    width: 100%;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--primary);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .btn-export:hover {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+  }
+
+  /* Chat Area */
+  .chat-area {
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    position: relative;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .chat-header {
+    padding: 14px 24px;
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
+  .ai-avatar {
+    width: 40px; height: 40px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-light));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+
+  .ai-info h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .ai-info p {
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+
+  .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-height: 0;
+  }
+
+  .chat-messages::-webkit-scrollbar { width: 4px; }
+  .chat-messages::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+
+  .message {
+    max-width: 85%;
+    animation: msgIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    flex-shrink: 0;
+  }
+
+  @keyframes msgIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .message.ai { align-self: flex-start; }
+  .message.user { align-self: flex-end; }
+
+  .message-bubble {
+    padding: 14px 18px;
+    border-radius: 16px;
+    font-size: 14px;
+    line-height: 1.6;
+    position: relative;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+
+  .message.ai .message-bubble {
+    background: var(--card);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-bottom-left-radius: 4px;
+    box-shadow: var(--shadow);
+  }
+
+  .message.user .message-bubble {
+    background: var(--primary);
+    color: white;
+    border-bottom-right-radius: 4px;
+    box-shadow: 0 2px 8px rgba(26,58,107,0.25);
+  }
+
+  .message-time {
+    font-size: 10px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+    padding: 0 4px;
+  }
+
+  .message.user .message-time {
+    text-align: right;
+  }
+
+  .message-intent {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(26,58,107,0.08);
+    color: var(--primary);
+    margin-top: 8px;
+    font-weight: 500;
+  }
+
+  .message.ai .message-intent {
+    background: rgba(34,197,94,0.1);
+    color: var(--success);
+  }
+
+  .typing-indicator {
+    display: flex;
+    gap: 4px;
+    padding: 16px 18px;
+    align-items: center;
+  }
+
+  .typing-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--primary);
+    opacity: 0.4;
+    animation: typingBounce 1.4s infinite;
+  }
+
+  .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+  .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes typingBounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+    30% { transform: translateY(-6px); opacity: 1; }
+  }
+
+  .chat-input-area {
+    padding: 16px 24px;
+    background: var(--card);
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .quick-actions {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+
+  .quick-btn {
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--primary);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+
+  .quick-btn:hover {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+  }
+
+  .input-row {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+  }
+
+  .input-wrapper {
+    flex: 1;
+    position: relative;
+  }
+
+  .chat-input {
+    width: 100%;
+    padding: 12px 16px;
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    font-size: 14px;
+    font-family: 'Inter', sans-serif;
+    outline: none;
+    transition: all 0.2s;
+    resize: none;
+    min-height: 46px;
+    max-height: 100px;
+    background: var(--bg);
+  }
+
+  .chat-input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(26,58,107,0.1);
+    background: white;
+  }
+
+  .chat-input::placeholder {
+    color: #94a3b8;
+  }
+
+  .btn-send {
+    width: 46px; height: 46px;
+    border-radius: 12px;
+    border: none;
+    background: var(--primary);
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+
+  .btn-send:hover {
+    background: var(--primary-light);
+    transform: scale(1.05);
+  }
+
+  .btn-send:active { transform: scale(0.95); }
+  .btn-send:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+  /* Form Preview Panel */
+  .form-panel {
+    background: var(--card);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  .form-panel-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .form-panel-header h3 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .form-panel-header .badge {
+    font-size: 10px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    background: #eef2ff;
+    color: var(--primary);
+    font-weight: 600;
+  }
+
+  .form-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    padding: 0 20px;
+    flex-shrink: 0;
+  }
+
+  .form-tab {
+    padding: 10px 16px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+  }
+
+  .form-tab.active {
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+  }
+
+  .form-tab:hover { color: var(--primary); }
+
+  .form-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px;
+    min-height: 0;
+  }
+
+  .form-content::-webkit-scrollbar { width: 4px; }
+  .form-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  .form-section {
+    margin-bottom: 20px;
+    animation: fadeUp 0.4s ease;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .form-section-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--primary);
+    margin-bottom: 12px;
+    padding-bottom: 6px;
+    border-bottom: 2px solid var(--primary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .form-field {
+    margin-bottom: 12px;
+  }
+
+  .form-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+    display: block;
+  }
+
+  .form-value {
+    font-size: 13px;
+    color: var(--text);
+    padding: 8px 12px;
+    background: var(--bg);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+    transition: all 0.3s;
+    word-wrap: break-word;
+  }
+
+  .form-value.filled {
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+    color: #166534;
+  }
+
+  .form-value.empty {
+    color: #94a3b8;
+    font-style: italic;
+    border-style: dashed;
+  }
+
+  .form-value.highlight {
+    border-color: var(--accent);
+    background: #fffbeb;
+    animation: highlightPulse 2s ease;
+  }
+
+  @keyframes highlightPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(232,168,56,0.3); }
+    50% { box-shadow: 0 0 0 4px rgba(232,168,56,0.1); }
+  }
+
+  .form-value .edit-icon {
+    margin-left: auto;
+    opacity: 0;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text-secondary);
+    transition: opacity 0.2s;
+    flex-shrink: 0;
+    padding-left: 8px;
+  }
+
+  .form-value:hover .edit-icon { opacity: 1; }
+
+  .alert-box {
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    line-height: 1.5;
+  }
+
+  .alert-box.info {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1e40af;
+  }
+
+  .alert-box.warning {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    color: #92400e;
+  }
+
+  .alert-box.success {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    color: #166534;
+  }
+
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    padding: 14px 20px;
+    background: var(--primary);
+    color: white;
+    border-radius: 12px;
+    font-size: 13px;
+    box-shadow: var(--shadow-lg);
+    transform: translateY(100px);
+    opacity: 0;
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .toast.show {
+    transform: translateY(0);
+    opacity: 1;
+  }
+
+  .suggestion-chip {
+    padding: 5px 12px;
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    font-size: 12px;
+    color: var(--primary);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .suggestion-chip:hover {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+  }
+
+  @media (max-width: 1200px) {
+    .main { grid-template-columns: 220px 1fr 320px; }
+  }
+
+  @media (max-width: 960px) {
+    .main { grid-template-columns: 1fr; }
+    .sidebar, .form-panel { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <div class="logo-badge">МГТУ</div>
+    <div>
+      <div class="header-title">Профилирование должностей</div>
+      <div class="header-subtitle">Проект грейдирования · МГТУ им. Н.Э. Баумана</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="progress-overall">
+      <span>Заполнено:</span>
+      <div class="progress-bar-mini">
+        <div class="progress-bar-mini-fill" id="overall-progress"></div>
+      </div>
+      <span id="progress-text">0%</span>
+    </div>
+    <div class="header-status">
+      <div class="status-dot"></div>
+      <span>ИИ-агент активен</span>
+    </div>
+  </div>
+</div>
+
+<div class="main">
+  <div class="sidebar">
+    <div class="sidebar-title">Разделы профиля</div>
+    <div id="sections-list">
+      <div class="section-item current" data-section="1" onclick="goToSection(1)">
+        <div class="section-num">1</div>
+        <div class="section-info">
+          <div class="section-name">Общая информация</div>
+          <div class="section-status">В процессе</div>
+        </div>
+      </div>
+      <div class="section-item" data-section="2" onclick="goToSection(2)">
+        <div class="section-num">2</div>
+        <div class="section-info">
+          <div class="section-name">Цель должности</div>
+          <div class="section-status">Ожидает</div>
+        </div>
+      </div>
+      <div class="section-item" data-section="3" onclick="goToSection(3)">
+        <div class="section-num">3</div>
+        <div class="section-info">
+          <div class="section-name">Обязанности</div>
+          <div class="section-status">Ожидает</div>
+        </div>
+      </div>
+      <div class="section-item" data-section="4" onclick="goToSection(4)">
+        <div class="section-num">4</div>
+        <div class="section-info">
+          <div class="section-name">Бюджетная ответственность</div>
+          <div class="section-status">Ожидает</div>
+        </div>
+      </div>
+      <div class="section-item" data-section="5" onclick="goToSection(5)">
+        <div class="section-num">5</div>
+        <div class="section-info">
+          <div class="section-name">Сложность задач</div>
+          <div class="section-status">Ожидает</div>
+        </div>
+      </div>
+      <div class="section-item" data-section="6" onclick="goToSection(6)">
+        <div class="section-num">6</div>
+        <div class="section-info">
+          <div class="section-name">Коммуникации</div>
+          <div class="section-status">Ожидает</div>
+        </div>
+      </div>
+      <div class="section-item" data-section="7" onclick="goToSection(7)">
+        <div class="section-num">7</div>
+        <div class="section-info">
+          <div class="section-name">Полномочия</div>
+          <div class="section-status">Ожидает</div>
+        </div>
+      </div>
+      <div class="section-item" data-section="8" onclick="goToSection(8)">
+        <div class="section-num">8</div>
+        <div class="section-info">
+          <div class="section-name">Требования</div>
+          <div class="section-status">Ожидает</div>
+        </div>
+      </div>
+      <div class="section-item" data-section="9" onclick="goToSection(9)">
+        <div class="section-num">9</div>
+        <div class="section-info">
+          <div class="section-name">Комментарии</div>
+          <div class="section-status">Ожидает</div>
+        </div>
+      </div>
+    </div>
+    <div class="sidebar-footer">
+      <button class="btn-export" onclick="exportProfile()">📄 Экспорт профиля</button>
+    </div>
+  </div>
+
+  <div class="chat-area">
+    <div class="chat-header">
+      <div class="ai-avatar">🤖</div>
+      <div class="ai-info">
+        <h3>ИИ-Профайлер</h3>
+        <p>Ассистент по профилированию должностей</p>
+      </div>
+    </div>
+
+    <div class="chat-messages" id="chat-messages">
+    </div>
+
+    <div class="chat-input-area">
+      <div class="quick-actions" id="quick-actions"></div>
+      <div class="input-row">
+        <div class="input-wrapper">
+          <textarea class="chat-input" id="chat-input" placeholder="Введите ответ..." rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+        </div>
+        <button class="btn-send" id="btn-send" onclick="sendMessage()">➤</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="form-panel">
+    <div class="form-panel-header">
+      <h3>📋 Профиль должности</h3>
+      <span class="badge" id="form-badge">Черновик</span>
+    </div>
+    <div class="form-tabs">
+      <div class="form-tab active" onclick="switchTab('current', this)">Текущий раздел</div>
+      <div class="form-tab" onclick="switchTab('full', this)">Весь профиль</div>
+    </div>
+    <div class="form-content" id="form-content"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const state = {
+  currentSection: 1,
+  currentStep: 0,
+  profile: {
+    section1: { position: '', orgStructure: '', adminManager: '', funcManager: '', directReports: '', totalSubordinates: '', funcSubordinates: '', date: '' },
+    section2: { goal: '' },
+    section3: { duties: [] },
+    section4: { incomeResponsibility: '', budgetType: '', budgetAmount: '', budgetCharacter: '' },
+    section5: { taskType: '', complexTaskExample: '' },
+    section6: { external: [], internal: [], govOrgans: '' },
+    section7: { independentDecisions: '', approvalDecisions: '' },
+    section8: { education: '', specialization: '', certification: '', laws: '', methods: '', software: '', trends: '', profExperience: '', mgmtExperience: '' },
+    section9: { comments: '' }
+  },
+  completedSections: new Set(),
+  isTyping: false
+};
+
+const dialogFlow = {
+  1: [
+    {
+      ai: "Здравствуйте! 👋 Я помогу вам составить профиль должности. Начнём с раздела «Общая информация».\n\nКак называется ваша должность? Укажите полное наименование согласно штатному расписанию.",
+      intent: "section1.position",
+      placeholder: "Например: Начальник отдела кадров",
+      quickActions: ["Начальник отдела", "Ведущий специалист", "Декан факультета", "Проректор"]
+    },
+    {
+      ai: "Отлично! Теперь укажите, к какому подразделению относится должность. Напишите всю цепочку без аббревиатур.",
+      intent: "section1.orgStructure",
+      placeholder: "Например: Управление персоналом → Отдел кадров",
+      quickActions: ["Управление персоналом", "Учебный отдел", "Научный отдел", "Финансовый отдел"]
+    },
+    {
+      ai: "Понял. Кто является административным руководителем этой должности? Укажите должность и подразделение.",
+      intent: "section1.adminManager",
+      placeholder: "Например: Проректор по персоналу",
+      quickActions: ["Проректор", "Начальник управления", "Декан", "Ректор"]
+    },
+    {
+      ai: "Есть ли функциональный руководитель, отличный от административного? Если совпадает — напишите «совпадает».",
+      intent: "section1.funcManager",
+      placeholder: "Должность функционального руководителя или «совпадает»",
+      quickActions: ["Совпадает", "Начальник департамента", "Директор института"]
+    },
+    {
+      ai: "Сколько человек находится в прямом административном подчинении? Укажите должности и количество.",
+      intent: "section1.directReports",
+      placeholder: "Например: 3 ведущих специалиста, 2 специалиста",
+      quickActions: ["Нет подчинённых", "1-3 человека", "4-10 человек", "Более 10"]
+    },
+    {
+      ai: "Какое общее количество сотрудников во всей вертикали подчинения (все уровни)?",
+      intent: "section1.totalSubordinates",
+      placeholder: "Число сотрудников",
+      quickActions: ["0", "1-5", "6-20", "21-50", "Более 50"]
+    },
+    {
+      ai: "Есть ли функциональные подчинённые (сотрудники по функциональному направлению вне прямого подчинения)? Сколько человек?",
+      intent: "section1.funcSubordinates",
+      placeholder: "Количество или «нет»",
+      quickActions: ["Нет", "1-5", "6-15", "Более 15"]
+    },
+    {
+      ai: "✅ Раздел 1 заполнен! Переходим к разделу 2 — «Цель должности».\n\nДля чего создана эта должность в университете? Опишите в 1-3 предложениях. Избегайте универсальных формулировок — ответьте: что стало бы хуже, если бы этой должности не было?",
+      intent: "section2.goal",
+      placeholder: "Опишите цель должности...",
+      quickActions: null,
+      sectionComplete: true
+    }
+  ],
+  2: [
+    {
+      ai: "Спасибо! Переходим к разделу 3 — «Обязанности и функциональные области».\n\nНазовите 1-2 самые важные обязанности должности. Используйте глаголы действия: Разрабатывает, Организует, Анализирует, Обеспечивает, Контролирует.",
+      intent: "section3.duty1",
+      placeholder: "Например: Разрабатывает систему мониторинга...",
+      quickActions: ["Разрабатывает...", "Организует...", "Анализирует...", "Контролирует..."]
+    },
+    {
+      ai: "Хорошо! Какой результат для университета даёт эта обязанность?",
+      intent: "section3.duty1result",
+      placeholder: "Результат для университета...",
+      quickActions: null
+    },
+    {
+      ai: "Назовите ещё 1-2 ключевые обязанности.",
+      intent: "section3.duty2",
+      placeholder: "Следующая обязанность...",
+      quickActions: ["Обеспечивает...", "Принимает решения...", "Готовит предложения..."]
+    },
+    {
+      ai: "Какой результат даёт эта обязанность?",
+      intent: "section3.duty2result",
+      placeholder: "Результат...",
+      quickActions: null,
+      sectionComplete: true
+    }
+  ],
+  3: [
+    {
+      ai: "Переходим к разделу 4 — «Бюджетная ответственность».\n\nСтоит ли перед должностью план по генерации доходов или привлечению финансирования? Если да — укажите объём в руб./год.",
+      intent: "section4.income",
+      placeholder: "Опишите или «Не применимо»",
+      quickActions: ["Не применимо", "До 10 млн руб/год", "10-100 млн руб/год", "Более 100 млн"]
+    },
+    {
+      ai: "Имеет ли должность полномочия управления бюджетом расходов? Укажите тип, сумму и характер управления.",
+      intent: "section4.budget",
+      placeholder: "Тип бюджета, сумма, характер...",
+      quickActions: ["Не управляет бюджетом", "ФОТ до 10 млн", "Операционный бюджет", "Полная ответственность"]
+    },
+    {
+      ai: "✅ Раздел 4 заполнен! Переходим к разделу 5 — «Сложность задач».",
+      intent: "section5.intro",
+      placeholder: "",
+      quickActions: ["Продолжить"]
+    }
+  ],
+  4: [
+    {
+      ai: "Насколько нестандартны задачи, с которыми вы работаете? Выберите описание:\n\n• Стандартные — по установленным правилам\n• Типовые с вариациями — требуют адаптации\n• Сложные/нестандартные — нет готовых решений\n• Уникальные/пионерские — решаются впервые",
+      intent: "section5.taskType",
+      placeholder: "Выберите тип задач",
+      quickActions: ["Стандартные", "Типовые с вариациями", "Сложные/нестандартные", "Уникальные/пионерские"]
+    },
+    {
+      ai: "Опишите пример наиболее сложной задачи за последний год. Что делало её сложной? Как решали?",
+      intent: "section5.complexTask",
+      placeholder: "Опишите сложную задачу...",
+      quickActions: null,
+      sectionComplete: true
+    }
+  ],
+  5: [
+    {
+      ai: "Раздел 6 — «Коммуникации и взаимодействие».\n\nС кем за пределами университета взаимодействует должность? Укажите организацию, тему и цель.",
+      intent: "section6.external",
+      placeholder: "Например: Минобрнауки — согласование отчётности",
+      quickActions: ["Минобрнауки", "Отраслевые партнёры", "Не взаимодействует"]
+    },
+    {
+      ai: "С кем внутри университета взаимодействует наиболее тесно? Укажите должности/подразделения.",
+      intent: "section6.internal",
+      placeholder: "Например: Деканы факультетов — координация...",
+      quickActions: ["Деканы", "Проректоры", "Кафедры", "Все подразделения"]
+    },
+    {
+      ai: "Взаимодействует ли должность с государственными органами или органами надзора?",
+      intent: "section6.govOrgans",
+      placeholder: "Перечислите или «Не применимо»",
+      quickActions: ["Не применимо", "Рособрнадзор", "Минобрнауки", "Прокуратура"],
+      sectionComplete: true
+    }
+  ],
+  6: [
+    {
+      ai: "Раздел 7 — «Полномочия и принятие решений».\n\nКакие решения должность принимает самостоятельно, без согласования с руководителем?",
+      intent: "section7.independent",
+      placeholder: "Например: Выбор подрядчика, приоритизация задач...",
+      quickActions: ["Выбор метода работы", "Приоритизация задач", "Распределение задач в команде"]
+    },
+    {
+      ai: "Какие решения требуют согласования с руководителем?",
+      intent: "section7.approval",
+      placeholder: "Например: Утверждение бюджета, изменения в структуре...",
+      quickActions: ["Годовой бюджет", "Оргструктура", "Крупные партнёрства"],
+      sectionComplete: true
+    }
+  ],
+  7: [
+    {
+      ai: "Раздел 8 — «Требования к должности».\n\nКакой минимальный уровень образования необходим для выполнения обязанностей?",
+      intent: "section8.education",
+      placeholder: "Уровень образования",
+      quickActions: ["Среднее профессиональное", "Высшее (бакалавр/магистр)", "MBA", "Кандидат/доктор наук"]
+    },
+    {
+      ai: "Какая специализация/квалификация требуется? Нужны ли сертификаты?",
+      intent: "section8.specialization",
+      placeholder: "Направление подготовки, сертификаты...",
+      quickActions: ["Управление персоналом", "Экономика", "Юриспруденция", "IT"]
+    },
+    {
+      ai: "Какие знания законодательства, методик, программ и технологий необходимы?",
+      intent: "section8.knowledge",
+      placeholder: "Законы, методики, программы...",
+      quickActions: ["ТК РФ, 1С:ЗУП", "44-ФЗ, Excel", "PMBOK, Agile", "Закон об образовании"]
+    },
+    {
+      ai: "Какой опыт требуется? Укажите лет профессионального и управленческого опыта.",
+      intent: "section8.experience",
+      placeholder: "Проф. опыт: X лет, Управленческий: Y лет",
+      quickActions: ["1-3 года", "3-5 лет", "5-10 лет", "Более 10 лет"],
+      sectionComplete: true
+    }
+  ],
+  8: [
+    {
+      ai: "Последний раздел — «Комментарии и дополнения».\n\nЕсть ли что-то важное о должности, что не вошло в предыдущие разделы? Может быть, уточнения или особые условия?",
+      intent: "section9.comments",
+      placeholder: "Ваши комментарии...",
+      quickActions: ["Нечего добавить", "Особые условия работы", "Совмещение функций"]
+    },
+    {
+      ai: "🎉 Отлично! Профиль должности практически готов!\n\nЯ проанализировал все данные. Сейчас сформирую итоговый профиль и проверю на расхождения с должностной инструкцией.",
+      intent: "complete",
+      placeholder: "",
+      quickActions: ["Посмотреть профиль", "Внести правки", "Экспортировать"],
+      sectionComplete: true
+    }
+  ]
+};
+
+function getTime() {
+  const now = new Date();
+  return now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+}
+
+function addMessage(type, text, intent) {
+  const container = document.getElementById('chat-messages');
+  const msg = document.createElement('div');
+  msg.className = `message ${type}`;
+
+  let intentHtml = '';
+  if (intent && type === 'ai') {
+    intentHtml = `<div class="message-intent">🎯 Интент: ${intent}</div>`;
+  }
+
+  const formattedText = text.replace(/\n/g, '<br>');
+
+  msg.innerHTML = `
+    <div class="message-bubble">${formattedText}${intentHtml}</div>
+    <div class="message-time">${getTime()}</div>
+  `;
+
+  container.appendChild(msg);
+  scrollToBottom();
+}
+
+function scrollToBottom() {
+  const container = document.getElementById('chat-messages');
+  requestAnimationFrame(() => {
+    container.scrollTop = container.scrollHeight;
+  });
+}
+
+function showTyping() {
+  const container = document.getElementById('chat-messages');
+  const typing = document.createElement('div');
+  typing.className = 'message ai';
+  typing.id = 'typing-msg';
+  typing.innerHTML = `
+    <div class="message-bubble">
+      <div class="typing-indicator">
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+      </div>
+    </div>
+  `;
+  container.appendChild(typing);
+  scrollToBottom();
+  state.isTyping = true;
+}
+
+function hideTyping() {
+  const el = document.getElementById('typing-msg');
+  if (el) el.remove();
+  state.isTyping = false;
+}
+
+function setQuickActions(actions) {
+  const container = document.getElementById('quick-actions');
+  container.innerHTML = '';
+  if (!actions) return;
+  actions.forEach(action => {
+    const btn = document.createElement('button');
+    btn.className = 'quick-btn';
+    btn.textContent = action;
+    btn.onclick = () => {
+      document.getElementById('chat-input').value = action;
+      sendMessage();
+    };
+    container.appendChild(btn);
+  });
+}
+
+function updatePlaceholder(text) {
+  document.getElementById('chat-input').placeholder = text || 'Введите ответ...';
+}
+
+function renderForm() {
+  const container = document.getElementById('form-content');
+  const section = state.currentSection;
+  let html = '';
+
+  const sectionTitles = {
+    1: '📌 Раздел 1. Общая информация',
+    2: '🎯 Раздел 2. Цель должности',
+    3: '📋 Раздел 3. Обязанности',
+    4: '💰 Раздел 4. Бюджет',
+    5: '🧩 Раздел 5. Сложность задач',
+    6: '🤝 Раздел 6. Коммуникации',
+    7: '⚡ Раздел 7. Полномочия',
+    8: '📚 Раздел 8. Требования',
+    9: '💬 Раздел 9. Комментарии'
+  };
+
+  const p = state.profile;
+
+  if (section === 1) {
+    html = `
+      <div class="form-section">
+        <div class="form-section-title">${sectionTitles[1]}</div>
+        ${renderField('Должность', p.section1.position)}
+        ${renderField('Оргструктура', p.section1.orgStructure)}
+        ${renderField('Адм. руководитель', p.section1.adminManager)}
+        ${renderField('Функ. руководитель', p.section1.funcManager)}
+        ${renderField('Прямые подчинённые', p.section1.directReports)}
+        ${renderField('Всего подчинённых', p.section1.totalSubordinates)}
+        ${renderField('Функ. подчинённые', p.section1.funcSubordinates)}
+      </div>
+    `;
+  } else if (section === 2) {
+    html = `<div class="form-section"><div class="form-section-title">${sectionTitles[2]}</div>${renderField('Цель должности', p.section2.goal, true)}</div>`;
+  } else if (section === 3) {
+    html = `<div class="form-section"><div class="form-section-title">${sectionTitles[3]}</div>`;
+    if (p.section3.duties.length > 0) {
+      p.section3.duties.forEach((d, i) => {
+        html += `<div class="form-field"><div class="form-label">Обязанность ${i+1}</div><div class="form-value filled">${d.duty} <span class="edit-icon">✎</span></div>`;
+        if (d.result) html += `<div class="form-label" style="margin-top:6px">Результат</div><div class="form-value filled">${d.result} <span class="edit-icon">✎</span></div>`;
+        html += `</div>`;
+      });
+    } else {
+      html += renderField('Обязанности', '', false, true);
+    }
+    html += `</div>`;
+  } else if (section === 4) {
+    html = `<div class="form-section"><div class="form-section-title">${sectionTitles[4]}</div>${renderField('Доходы/финансирование', p.section4.incomeResponsibility)}${renderField('Тип бюджета', p.section4.budgetType)}${renderField('Объём бюджета', p.section4.budgetAmount)}${renderField('Характер управления', p.section4.budgetCharacter)}</div>`;
+  } else if (section === 5) {
+    html = `<div class="form-section"><div class="form-section-title">${sectionTitles[5]}</div>${renderField('Тип задач', p.section5.taskType)}${renderField('Пример сложной задачи', p.section5.complexTaskExample, true)}</div>`;
+  } else if (section === 6) {
+    html = `<div class="form-section"><div class="form-section-title">${sectionTitles[6]}</div>${renderField('Внешние контакты', p.section6.external.length > 0 ? p.section6.external.join('; ') : '')}${renderField('Внутренние контакты', p.section6.internal.length > 0 ? p.section6.internal.join('; ') : '')}${renderField('Госорганы', p.section6.govOrgans)}</div>`;
+  } else if (section === 7) {
+    html = `<div class="form-section"><div class="form-section-title">${sectionTitles[7]}</div>${renderField('Самостоятельные решения', p.section7.independentDecisions, true)}${renderField('Решения на согласование', p.section7.approvalDecisions, true)}</div>`;
+  } else if (section === 8) {
+    html = `<div class="form-section"><div class="form-section-title">${sectionTitles[8]}</div>${renderField('Образование', p.section8.education)}${renderField('Специализация', p.section8.specialization)}${renderField('Знания и навыки', p.section8.knowledge || '')}${renderField('Опыт', p.section8.profExperience ? `Проф: ${p.section8.profExperience}, Упр: ${p.section8.mgmtExperience}` : '')}</div>`;
+  } else if (section === 9) {
+    html = `<div class="form-section"><div class="form-section-title">${sectionTitles[9]}</div>${renderField('Комментарии', p.section9.comments, true)}</div><div class="alert-box success">✅ Профиль готов к экспорту! Нажмите «Экспорт профиля» в левом меню.</div>`;
+  }
+
+  container.innerHTML = html;
+}
+
+function renderField(label, value, isTextarea = false, isEmpty = false) {
+  const filled = value && value !== 'Пока не заполнено' && value !== '';
+  return `
+    <div class="form-field">
+      <div class="form-label">${label}</div>
+      <div class="form-value ${filled ? 'filled' : (isEmpty ? 'empty' : '')}">
+        ${filled ? value : (isEmpty ? 'Ожидает заполнения...' : 'Не заполнено')}
+        <span class="edit-icon">✎</span>
+      </div>
+    </div>
+  `;
+}
+
+function updateProgress() {
+  const total = 9;
+  const completed = state.completedSections.size;
+  const pct = Math.round((completed / total) * 100);
+  document.getElementById('overall-progress').style.width = pct + '%';
+  document.getElementById('progress-text').textContent = pct + '%';
+
+  document.querySelectorAll('.section-item').forEach(item => {
+    const num = parseInt(item.dataset.section);
+    item.classList.remove('current', 'completed');
+    const statusEl = item.querySelector('.section-status');
+
+    if (state.completedSections.has(num)) {
+      item.classList.add('completed');
+      statusEl.textContent = '✓ Заполнен';
+    } else if (num === state.currentSection) {
+      item.classList.add('current');
+      statusEl.textContent = 'В процессе';
+    } else {
+      statusEl.textContent = 'Ожидает';
+    }
+  });
+}
+
+function getCurrentDialog() {
+  const section = state.currentSection;
+  const step = state.currentStep;
+  const dialogs = dialogFlow[section];
+  if (!dialogs || step >= dialogs.length) return null;
+  return dialogs[step];
+}
+
+function processIntent(intent, value) {
+  const parts = intent.split('.');
+  if (parts.length >= 2) {
+    const section = parts[0];
+    const field = parts[1];
+
+    if (section === 'section3' && (field === 'duty1' || field === 'duty2')) {
+      const dutyNum = field === 'duty1' ? 0 : 1;
+      if (!state.profile.section3.duties[dutyNum]) state.profile.section3.duties[dutyNum] = { duty: '', result: '' };
+      state.profile.section3.duties[dutyNum].duty = value;
+    } else if (section === 'section3' && (field === 'duty1result' || field === 'duty2result')) {
+      const dutyNum = field === 'duty1result' ? 0 : 1;
+      if (!state.profile.section3.duties[dutyNum]) state.profile.section3.duties[dutyNum] = { duty: '', result: '' };
+      state.profile.section3.duties[dutyNum].result = value;
+    } else if (section === 'section6' && (field === 'external' || field === 'internal')) {
+      if (!state.profile.section6[field]) state.profile.section6[field] = [];
+      state.profile.section6[field].push(value);
+    } else if (section === 'section8' && field === 'knowledge') {
+      state.profile.section8.knowledge = value;
+      const parts = value.split(',');
+      state.profile.section8.laws = parts[0] || value;
+      state.profile.section8.methods = parts[1] || '';
+      state.profile.section8.software = parts[2] || '';
+    } else if (section === 'section8' && field === 'experience') {
+      state.profile.section8.profExperience = value;
+      state.profile.section8.mgmtExperience = value;
+    } else if (state.profile[section] && state.profile[section][field] !== undefined) {
+      state.profile[section][field] = value;
+    }
+  }
+}
+
+function nextStep() {
+  const dialog = getCurrentDialog();
+  if (!dialog) return;
+
+  state.currentStep++;
+  const nextDialog = getCurrentDialog();
+
+  if (dialog.sectionComplete && nextDialog) {
+    state.completedSections.add(state.currentSection);
+    state.currentSection++;
+    state.currentStep = 0;
+    updateProgress();
+  } else if (!nextDialog && dialog.sectionComplete) {
+    state.completedSections.add(state.currentSection);
+    updateProgress();
+  }
+
+  renderForm();
+  scheduleNextMessage();
+}
+
+function scheduleNextMessage() {
+  const dialog = getCurrentDialog();
+  if (!dialog) return;
+
+  showTyping();
+  const delay = 800 + Math.random() * 700;
+
+  setTimeout(() => {
+    hideTyping();
+    addMessage('ai', dialog.ai, dialog.intent);
+    setQuickActions(dialog.quickActions);
+    updatePlaceholder(dialog.placeholder);
+  }, delay);
+}
+
+function sendMessage() {
+  if (state.isTyping) return;
+
+  const input = document.getElementById('chat-input');
+  const value = input.value.trim();
+  if (!value) return;
+
+  const dialog = getCurrentDialog();
+  if (!dialog) return;
+
+  addMessage('user', value);
+  input.value = '';
+  input.style.height = 'auto';
+  document.getElementById('quick-actions').innerHTML = '';
+  document.getElementById('btn-send').disabled = true;
+
+  processIntent(dialog.intent, value);
+  renderForm();
+
+  setTimeout(() => {
+    const container = document.getElementById('chat-messages');
+    const el = document.createElement('div');
+    el.className = 'message ai';
+    el.innerHTML = `
+      <div class="message-bubble" style="padding:8px 14px; font-size:12px;">
+        ✅ Распознано: <b>${dialog.intent}</b> → поле заполнено
+        <div class="message-intent">🎯 Интент подтверждён</div>
+      </div>
+      <div class="message-time">${getTime()}</div>
+    `;
+    container.appendChild(el);
+    scrollToBottom();
+  }, 400);
+
+  setTimeout(() => {
+    document.getElementById('btn-send').disabled = false;
+    nextStep();
+  }, 1200);
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 100) + 'px';
+}
+
+function goToSection(num) {
+  state.currentSection = num;
+  state.currentStep = 0;
+  renderForm();
+  updateProgress();
+
+  const dialog = getCurrentDialog();
+  if (dialog) {
+    document.getElementById('chat-messages').innerHTML = '';
+    addMessage('ai', dialog.ai, dialog.intent);
+    setQuickActions(dialog.quickActions);
+    updatePlaceholder(dialog.placeholder);
+  }
+}
+
+function switchTab(tab, el) {
+  document.querySelectorAll('.form-tab').forEach(t => t.classList.remove('active'));
+  if (el) el.classList.add('active');
+
+  if (tab === 'full') {
+    const container = document.getElementById('form-content');
+    let html = '<div style="padding:8px 0;">';
+    html += `<div class="alert-box info">📄 Полный профиль — ${state.completedSections.size} из 9 разделов заполнено</div>`;
+    const titles = ['Общая информация', 'Цель должности', 'Обязанности', 'Бюджет', 'Сложность задач', 'Коммуникации', 'Полномочия', 'Требования', 'Комментарии'];
+    for (let i = 0; i < 9; i++) {
+      const filled = state.completedSections.has(i + 1);
+      html += `<div class="form-field" style="margin-bottom:8px;"><div class="form-label">Раздел ${i+1}: ${titles[i]}</div><div class="form-value ${filled ? 'filled' : 'empty'}" style="font-size:12px;">${filled ? '✓ Заполнено' : '○ Не заполнено'}</div></div>`;
+    }
+    html += '</div>';
+    container.innerHTML = html;
+  } else {
+    renderForm();
+  }
+}
+
+function exportProfile() {
+  showToast('📄 Профиль экспортирован в формат Excel!');
+}
+
+function showToast(text) {
+  const toast = document.getElementById('toast');
+  toast.textContent = text;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+function updateClock() {
+  const now = new Date();
+  const h = String(now.getHours()).padStart(2, '0');
+  const m = String(now.getMinutes()).padStart(2, '0');
+  const s = String(now.getSeconds()).padStart(2, '0');
+  const el = document.querySelector('.header-status span:last-child');
+  if (el) el.textContent = `${h}:${m}:${s}`;
+}
+setInterval(updateClock, 1000);
+
+function init() {
+  renderForm();
+  updateProgress();
+
+  setTimeout(() => {
+    const dialog = getCurrentDialog();
+    if (dialog) {
+      showTyping();
+      setTimeout(() => {
+        hideTyping();
+        addMessage('ai', dialog.ai, dialog.intent);
+        setQuickActions(dialog.quickActions);
+        updatePlaceholder(dialog.placeholder);
+      }, 1200);
+    }
+  }, 500);
+}
+
+init();
+</script>
+</body>
+</html>
+
