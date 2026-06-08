@@ -6,9 +6,10 @@ import json
 import re
 from collections import Counter
 from pathlib import Path
-from zipfile import ZIP_DEFLATED, ZipFile
-import xml.etree.ElementTree as ET
 
+from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Font, PatternFill
+from openpyxl.utils import get_column_letter
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -53,17 +54,6 @@ CAMPAIGN_EXPORT_COLUMNS = [
     "due_at",
     "created_at",
 ]
-
-NS = {
-    "a": "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
-    "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
-}
-XML_NS = "http://www.w3.org/XML/1998/namespace"
-MAIN_NS = NS["a"]
-REL_NS = NS["r"]
-ET.register_namespace("", MAIN_NS)
-ET.register_namespace("r", REL_NS)
-
 
 class ExportOperationError(Exception):
     def __init__(self, message: str, status_code: int = 400) -> None:
@@ -191,9 +181,18 @@ def _unique_username(session: Session, full_name: str, email: str, employee_id: 
 
 def credentials_to_xlsx(rows: list[dict[str, object]]) -> bytes:
     headers = ["ФИО", "Email", "Логин", "Пароль", "Роль", "Должность"]
-    values = [
-        headers,
-        *[
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Доступы"
+    sheet.append(headers)
+
+    header_fill = PatternFill("solid", fgColor="E2F0D9")
+    for cell in sheet[1]:
+        cell.font = Font(bold=True)
+        cell.fill = header_fill
+
+    for row in rows:
+        sheet.append(
             [
                 str(row.get("full_name") or ""),
                 str(row.get("email") or ""),
@@ -202,80 +201,15 @@ def credentials_to_xlsx(rows: list[dict[str, object]]) -> bytes:
                 str(row.get("role") or ""),
                 str(row.get("position") or ""),
             ]
-            for row in rows
-        ],
-    ]
-    sheet_rows = []
-    for row_index, row in enumerate(values, start=1):
-        cells = []
-        for col_index, value in enumerate(row, start=1):
-            cells.append(
-                f'<c r="{_cell_ref(row_index, col_index)}" t="inlineStr">'
-                f"<is><t>{_xml_escape(value)}</t></is></c>"
-            )
-        sheet_rows.append(f'<row r="{row_index}">{"".join(cells)}</row>')
-    sheet_xml = (
-        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-        '<sheetViews><sheetView workbookViewId="0"/></sheetViews>'
-        '<sheetFormatPr defaultRowHeight="15"/>'
-        '<cols><col min="1" max="6" width="28" customWidth="1"/></cols>'
-        f"<sheetData>{''.join(sheet_rows)}</sheetData>"
-        "</worksheet>"
-    )
+        )
+
+    sheet.freeze_panes = "A2"
+    for index, width in enumerate([36, 32, 24, 20, 18, 36], start=1):
+        sheet.column_dimensions[get_column_letter(index)].width = width
+
     buffer = io.BytesIO()
-    with ZipFile(buffer, "w", ZIP_DEFLATED) as archive:
-        archive.writestr(
-            "[Content_Types].xml",
-            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-            '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
-            '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
-            '<Default Extension="xml" ContentType="application/xml"/>'
-            '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
-            '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
-            "</Types>",
-        )
-        archive.writestr(
-            "_rels/.rels",
-            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
-            "</Relationships>",
-        )
-        archive.writestr(
-            "xl/workbook.xml",
-            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-            '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
-            'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
-            '<sheets><sheet name="Доступы" sheetId="1" r:id="rId1"/></sheets></workbook>',
-        )
-        archive.writestr(
-            "xl/_rels/workbook.xml.rels",
-            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
-            "</Relationships>",
-        )
-        archive.writestr("xl/worksheets/sheet1.xml", sheet_xml)
+    workbook.save(buffer)
     return buffer.getvalue()
-
-
-def _cell_ref(row: int, column: int) -> str:
-    letters = ""
-    current = column
-    while current:
-        current, remainder = divmod(current - 1, 26)
-        letters = chr(65 + remainder) + letters
-    return f"{letters}{row}"
-
-
-def _xml_escape(value: str) -> str:
-    return (
-        value.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-    )
 
 
 def export_profiles(session: Session) -> list[dict[str, object]]:
@@ -456,32 +390,19 @@ def _visible_org_path(path: str) -> str:
 
 
 def _fill_profile_template(template_path: Path, answers: dict[str, str]) -> bytes:
-    with ZipFile(template_path, "r") as source:
-        sheet_path = _profile_sheet_path(source)
-        sheet_root = ET.fromstring(source.read(sheet_path))
-        _write_profile_cells(sheet_root, answers)
-        rendered_sheet = ET.tostring(sheet_root, encoding="utf-8", xml_declaration=True)
-
-        output = io.BytesIO()
-        with ZipFile(output, "w", ZIP_DEFLATED) as target:
-            for item in source.infolist():
-                content = rendered_sheet if item.filename == sheet_path else source.read(item.filename)
-                target.writestr(item, content)
-        return output.getvalue()
+    workbook = load_workbook(template_path)
+    worksheet = (
+        workbook["Профиль должности"]
+        if "Профиль должности" in workbook.sheetnames
+        else workbook.active
+    )
+    _write_profile_cells(worksheet, answers)
+    output = io.BytesIO()
+    workbook.save(output)
+    return output.getvalue()
 
 
-def _profile_sheet_path(archive: ZipFile) -> str:
-    workbook = ET.fromstring(archive.read("xl/workbook.xml"))
-    rels_root = ET.fromstring(archive.read("xl/_rels/workbook.xml.rels"))
-    rels = {item.attrib["Id"]: item.attrib["Target"] for item in rels_root}
-    sheets = workbook.findall("a:sheets/a:sheet", NS)
-    sheet = next((item for item in sheets if item.attrib.get("name") == "Профиль должности"), sheets[0])
-    rel_id = sheet.attrib[f"{{{REL_NS}}}id"]
-    target = rels[rel_id].lstrip("/")
-    return target if target.startswith("xl/") else f"xl/{target}"
-
-
-def _write_profile_cells(root: ET.Element, answers: dict[str, str]) -> None:
+def _write_profile_cells(worksheet, answers: dict[str, str]) -> None:
     cell_values: dict[str, str] = {
         "C11": answers.get("position_name", ""),
         "C12": answers.get("org_structure", ""),
@@ -554,7 +475,7 @@ def _write_profile_cells(root: ET.Element, answers: dict[str, str]) -> None:
         cell_values[cell] = "☑" if label == selected_education else "☐"
 
     for cell_ref, value in cell_values.items():
-        _set_inline_string(root, cell_ref, value)
+        _set_cell_value(worksheet, cell_ref, value)
 
 
 def _table_rows(raw_value: str, limit: int, width: int) -> list[list[str]]:
@@ -577,32 +498,10 @@ def _table_rows(raw_value: str, limit: int, width: int) -> list[list[str]]:
     return rows
 
 
-def _set_inline_string(root: ET.Element, cell_ref: str, value: str) -> None:
-    cell = _ensure_cell(root, cell_ref)
-    for child in list(cell):
-        if child.tag in {_q("v"), _q("is")}:
-            cell.remove(child)
-    cell.attrib["t"] = "inlineStr"
-    inline = ET.SubElement(cell, _q("is"))
-    text = ET.SubElement(inline, _q("t"))
-    text.text = value or ""
-    if value != value.strip():
-        text.attrib[f"{{{XML_NS}}}space"] = "preserve"
-
-
-def _ensure_cell(root: ET.Element, cell_ref: str) -> ET.Element:
-    sheet_data = root.find("a:sheetData", NS)
-    if sheet_data is None:
-        sheet_data = ET.SubElement(root, _q("sheetData"))
-    row_number = int("".join(ch for ch in cell_ref if ch.isdigit()))
-    row = sheet_data.find(f"a:row[@r='{row_number}']", NS)
-    if row is None:
-        row = ET.SubElement(sheet_data, _q("row"), {"r": str(row_number)})
-    cell = row.find(f"a:c[@r='{cell_ref}']", NS)
-    if cell is None:
-        cell = ET.SubElement(row, _q("c"), {"r": cell_ref})
-    return cell
-
-
-def _q(name: str) -> str:
-    return f"{{{MAIN_NS}}}{name}"
+def _set_cell_value(worksheet, cell_ref: str, value: str) -> None:
+    target = cell_ref
+    for merged_range in worksheet.merged_cells.ranges:
+        if cell_ref in merged_range:
+            target = merged_range.start_cell.coordinate
+            break
+    worksheet[target] = value or ""

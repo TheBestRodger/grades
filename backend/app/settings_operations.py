@@ -98,7 +98,7 @@ def ai_configuration_payload(
         "available": is_llm_enabled,
         "connection_status": "configured" if is_llm_enabled else "not_configured",
         "note": (
-            "LLM подключена. В модель передается только обезличенный контекст вопроса и ответа."
+            "LLM подключена."
             if is_llm_enabled
             else (
                 "LLM не настроена. Реальные вызовы не выполняются, "

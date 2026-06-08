@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 import json
 import re
 
@@ -10,10 +11,12 @@ from .auth_operations import generate_temporary_password, hash_password
 from .models import (
     Assignment,
     AuditEvent,
+    AuthSession,
     Campaign,
     CampaignParticipant,
     CampaignWave,
     CampaignWaveUnitSelection,
+    DocumentLink,
     Employee,
     EmployeeProfile,
     OrgUnit,
@@ -315,6 +318,245 @@ def create_work_staffing_line(
         "added": added,
         "remaining_fte": round(line.approved_fte - requested_fte, 2),
     }
+
+
+def delete_work_assignment(
+    session: Session,
+    actor: Employee,
+    assignment_id: int,
+    *,
+    force: bool = False,
+) -> dict[str, object]:
+    assignment = session.scalar(
+        select(Assignment)
+        .where(Assignment.id == assignment_id, Assignment.is_demo.is_(False))
+        .options(
+            selectinload(Assignment.employee),
+            selectinload(Assignment.staffing_line).selectinload(StaffingLine.org_unit),
+        )
+    )
+    if assignment is None:
+        raise HrOperationError("Назначение сотрудника не найдено.", 404)
+
+    warnings = _active_wave_warnings(session, {assignment.id})
+    if warnings and not force:
+        raise HrOperationError(_active_wave_warning_message(warnings), 409)
+
+    employee = assignment.employee
+    deleted = _delete_assignments(session, {assignment.id})
+    _audit(
+        session,
+        actor,
+        "assignment.work_deleted",
+        "assignment",
+        assignment_id,
+        {
+            "scope": "work",
+            "employee_id": employee.id,
+            "employee_name": employee.full_name,
+            "staffing_line_id": assignment.staffing_line_id,
+            "staffing_title": assignment.staffing_line.title,
+            "org_unit_id": assignment.staffing_line.org_unit_id,
+            "org_unit_name": assignment.staffing_line.org_unit.name,
+            "force": force,
+            **deleted,
+        },
+    )
+    session.flush()
+    return {"scope": "work", "assignment_id": assignment_id, **deleted}
+
+
+def delete_work_staffing_line(
+    session: Session,
+    actor: Employee,
+    staffing_line_id: int,
+    *,
+    force: bool = False,
+) -> dict[str, object]:
+    line = session.scalar(
+        select(StaffingLine)
+        .where(
+            StaffingLine.id == staffing_line_id,
+            StaffingLine.is_demo.is_(False),
+            StaffingLine.is_active.is_(True),
+        )
+        .options(
+            selectinload(StaffingLine.org_unit),
+            selectinload(StaffingLine.assignments).selectinload(Assignment.employee),
+        )
+    )
+    if line is None:
+        raise HrOperationError("Штатная строка не найдена.", 404)
+
+    assignment_ids = {assignment.id for assignment in line.assignments}
+    warnings = _active_wave_warnings(session, assignment_ids)
+    if warnings and not force:
+        raise HrOperationError(_active_wave_warning_message(warnings), 409)
+
+    deleted = _delete_assignments(session, assignment_ids)
+    links = session.scalars(
+        select(DocumentLink).where(
+            DocumentLink.target_type == "staffing_line",
+            DocumentLink.target_id == line.id,
+            DocumentLink.is_demo.is_(False),
+        )
+    ).all()
+    for link in links:
+        session.delete(link)
+
+    staffing_title = line.title
+    org_unit_id = line.org_unit_id
+    org_unit_name = line.org_unit.name
+    session.delete(line)
+    _audit(
+        session,
+        actor,
+        "staffing_line.work_deleted",
+        "staffing_line",
+        staffing_line_id,
+        {
+            "scope": "work",
+            "staffing_title": staffing_title,
+            "org_unit_id": org_unit_id,
+            "org_unit_name": org_unit_name,
+            "document_links_deleted": len(links),
+            "force": force,
+            **deleted,
+        },
+    )
+    session.flush()
+    return {
+        "scope": "work",
+        "staffing_line_id": staffing_line_id,
+        "document_links_deleted": len(links),
+        **deleted,
+    }
+
+
+def _delete_assignments(session: Session, assignment_ids: set[int]) -> dict[str, int]:
+    if not assignment_ids:
+        return {
+            "deleted_assignments": 0,
+            "deleted_participants": 0,
+            "deleted_profiles": 0,
+            "deactivated_employees": 0,
+        }
+
+    assignments = session.scalars(
+        select(Assignment)
+        .where(Assignment.id.in_(assignment_ids), Assignment.is_demo.is_(False))
+        .options(selectinload(Assignment.employee))
+    ).all()
+    employee_ids = {assignment.employee_id for assignment in assignments}
+    participants = session.scalars(
+        select(CampaignParticipant)
+        .where(CampaignParticipant.assignment_id.in_(assignment_ids))
+        .options(selectinload(CampaignParticipant.profile))
+    ).all()
+    profile_count = sum(1 for participant in participants if participant.profile is not None)
+    for participant in participants:
+        session.delete(participant)
+
+    reports = session.scalars(
+        select(Assignment).where(Assignment.manager_assignment_id.in_(assignment_ids))
+    ).all()
+    for report in reports:
+        report.manager_assignment_id = None
+
+    for assignment in assignments:
+        session.delete(assignment)
+
+    other_assignments = session.scalars(
+        select(Assignment).where(
+            Assignment.employee_id.in_(employee_ids),
+            ~Assignment.id.in_(assignment_ids),
+        )
+    ).all()
+    employees_with_other_assignments = {assignment.employee_id for assignment in other_assignments}
+    deactivated = 0
+    now = datetime.utcnow()
+    for assignment in assignments:
+        employee = assignment.employee
+        if employee.id in employees_with_other_assignments:
+            continue
+        if employee.is_active:
+            employee.is_active = False
+            deactivated += 1
+        for auth_session in session.scalars(
+            select(AuthSession).where(
+                AuthSession.employee_id == employee.id,
+                AuthSession.revoked_at.is_(None),
+            )
+        ).all():
+            auth_session.revoked_at = now
+
+    return {
+        "deleted_assignments": len(assignments),
+        "deleted_participants": len(participants),
+        "deleted_profiles": profile_count,
+        "deactivated_employees": deactivated,
+    }
+
+
+def _active_wave_warnings(
+    session: Session,
+    assignment_ids: set[int],
+) -> list[dict[str, object]]:
+    if not assignment_ids:
+        return []
+    participants = session.scalars(
+        select(CampaignParticipant)
+        .where(
+            CampaignParticipant.assignment_id.in_(assignment_ids),
+            CampaignParticipant.expected_to_submit.is_(True),
+        )
+        .options(
+            selectinload(CampaignParticipant.campaign),
+            selectinload(CampaignParticipant.wave),
+            selectinload(CampaignParticipant.assignment).selectinload(Assignment.employee),
+            selectinload(CampaignParticipant.assignment)
+            .selectinload(Assignment.staffing_line)
+            .selectinload(StaffingLine.org_unit),
+        )
+    ).all()
+    warnings: list[dict[str, object]] = []
+    seen: set[tuple[int | None, int]] = set()
+    for participant in participants:
+        if participant.wave is None or participant.wave.status != WAVE_STATUS_ACTIVE:
+            continue
+        key = (participant.campaign_wave_id, participant.assignment_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        assignment = participant.assignment
+        warnings.append(
+            {
+                "employee_name": assignment.employee.full_name,
+                "staffing_title": assignment.staffing_line.title,
+                "org_unit_name": assignment.staffing_line.org_unit.name,
+                "campaign_name": participant.campaign.name,
+                "wave_name": participant.wave.name,
+            }
+        )
+    return warnings
+
+
+def _active_wave_warning_message(warnings: list[dict[str, object]]) -> str:
+    shown = warnings[:5]
+    lines = [
+        (
+            f"{item['employee_name']} — {item['staffing_title']}, "
+            f"кампания «{item['campaign_name']}», волна «{item['wave_name']}»"
+        )
+        for item in shown
+    ]
+    suffix = "" if len(warnings) <= len(shown) else f" Ещё затронуто: {len(warnings) - len(shown)}."
+    return (
+        "Объект участвует в активной волне: "
+        + "; ".join(lines)
+        + ". При подтверждении будут удалены анкеты, ревизии и участие в отчетах."
+        + suffix
+    )
 
 
 def _ensure_unique_new_emails(session: Session, emails: list[str]) -> None:

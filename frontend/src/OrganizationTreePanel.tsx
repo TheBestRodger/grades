@@ -1,16 +1,20 @@
 import { useEffect, useId, useMemo, useState } from "react";
 
-import type { Campaign, OrgNode, Position } from "./types";
+import type { Assignment, Campaign, OrgNode, Position } from "./types";
 
 interface OrganizationTreePanelProps {
   nodes: OrgNode[];
   canManage: boolean;
   canAddEmployees?: boolean;
+  canEditStructure?: boolean;
   activeCampaign: Campaign | null;
   includingUnitId: number | null;
   excludingUnitId: number | null;
   changingAssignmentId?: number | null;
   onAdd: (position: Position) => void;
+  onCreatePosition?: (unit: OrgNode) => void;
+  onDeleteAssignment?: (assignment: Assignment, position: Position) => void;
+  onDeletePosition?: (position: Position) => void;
   onInclude: (unit: OrgNode) => void;
   onExclude: (unit: OrgNode) => void;
   onSetAssignment?: (assignmentId: number, included: boolean) => void;
@@ -129,17 +133,23 @@ function PositionLine({
   position,
   canAddEmployees,
   canManage,
+  canEditStructure,
   activeCampaign,
   changingAssignmentId,
   onAdd,
+  onDeleteAssignment,
+  onDeletePosition,
   onSetAssignment,
 }: {
   position: Position;
   canAddEmployees: boolean;
   canManage: boolean;
+  canEditStructure: boolean;
   activeCampaign: Campaign | null;
   changingAssignmentId?: number | null;
   onAdd: (position: Position) => void;
+  onDeleteAssignment?: (assignment: Assignment, position: Position) => void;
+  onDeletePosition?: (position: Position) => void;
   onSetAssignment?: (assignmentId: number, included: boolean) => void;
 }) {
   const included = new Set(activeCampaign?.participant_assignment_ids ?? []);
@@ -161,14 +171,27 @@ function PositionLine({
             </p>
           )}
         </div>
-        {canOpenEmployeeModal && (
-          <button
-            className="rounded-full bg-blue-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-800"
-            onClick={() => onAdd(position)}
-            type="button"
-          >
-            Добавить людей
-          </button>
+        {(canOpenEmployeeModal || canEditStructure) && (
+          <div className="flex flex-wrap gap-2">
+            {canOpenEmployeeModal && (
+              <button
+                className="rounded-full bg-blue-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-800"
+                onClick={() => onAdd(position)}
+                type="button"
+              >
+                Добавить людей
+              </button>
+            )}
+            {canEditStructure && (
+              <button
+                className="rounded-full border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
+                onClick={() => onDeletePosition?.(position)}
+                type="button"
+              >
+                Удалить штатную единицу
+              </button>
+            )}
+          </div>
         )}
       </div>
       <div className="mt-2 flex flex-wrap gap-2">
@@ -186,27 +209,40 @@ function PositionLine({
               {position.assigned_fte !== null && ` / ${displayFte(assignment.fte)}`}
             </>
           );
-          return canManage && activeCampaign ? (
-            <button
-              aria-label={`${isIncluded ? "Исключить" : "Включить"} назначение ${assignment.employee_name}`}
-              className={`${className} hover:border-blue-300 disabled:opacity-50`}
-              disabled={changingAssignmentId === assignment.id}
-              key={assignment.id}
-              onClick={() => onSetAssignment?.(assignment.id, !isIncluded)}
-              type="button"
-            >
-              {label}
-            </button>
-          ) : (
-            <span
-              className={`rounded-full border px-2.5 py-1 text-xs ${
-                isIncluded
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                  : "border-slate-200 bg-white text-slate-600"
-              }`}
-              key={assignment.id}
-            >
-              {label}
+          if (canManage && activeCampaign) {
+            return (
+              <button
+                aria-label={`${isIncluded ? "Исключить" : "Включить"} назначение ${assignment.employee_name}`}
+                className={`${className} hover:border-blue-300 disabled:opacity-50`}
+                disabled={changingAssignmentId === assignment.id}
+                key={assignment.id}
+                onClick={() => onSetAssignment?.(assignment.id, !isIncluded)}
+                type="button"
+              >
+                {label}
+              </button>
+            );
+          }
+          return (
+            <span className="inline-flex flex-wrap items-center gap-1" key={assignment.id}>
+              <span
+                className={`rounded-full border px-2.5 py-1 text-xs ${
+                  isIncluded
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                    : "border-slate-200 bg-white text-slate-600"
+                }`}
+              >
+                {label}
+              </span>
+              {canEditStructure && (
+                <button
+                  className="rounded-full border border-red-200 bg-white px-2.5 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"
+                  onClick={() => onDeleteAssignment?.(assignment, position)}
+                  type="button"
+                >
+                  Удалить
+                </button>
+              )}
             </span>
           );
         })}
@@ -226,10 +262,14 @@ function TreeNode({
   node: visibleNode,
   canManage,
   canAddEmployees = canManage,
+  canEditStructure = false,
   activeCampaign,
   includingUnitId,
   excludingUnitId,
   onAdd,
+  onCreatePosition,
+  onDeleteAssignment,
+  onDeletePosition,
   onInclude,
   onExclude,
   changingAssignmentId,
@@ -301,6 +341,15 @@ function TreeNode({
               </button>
             </div>
           )}
+          {canEditStructure && (
+            <button
+              className="rounded-full border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-900 hover:bg-blue-50"
+              onClick={() => onCreatePosition?.(node)}
+              type="button"
+            >
+              Добавить штатную единицу
+            </button>
+          )}
         </div>
       </div>
       {isExpanded && (
@@ -309,10 +358,13 @@ function TreeNode({
             <PositionLine
               activeCampaign={activeCampaign}
               canAddEmployees={canAddEmployees}
+              canEditStructure={canEditStructure}
               canManage={canManage}
               changingAssignmentId={changingAssignmentId}
               key={position.id}
               onAdd={onAdd}
+              onDeleteAssignment={onDeleteAssignment}
+              onDeletePosition={onDeletePosition}
               onSetAssignment={onSetAssignment}
               position={position}
             />
@@ -322,6 +374,7 @@ function TreeNode({
               activeCampaign={activeCampaign}
               canManage={canManage}
               canAddEmployees={canAddEmployees}
+              canEditStructure={canEditStructure}
               excludingUnitId={excludingUnitId}
               changingAssignmentId={changingAssignmentId}
               expandedUnitIds={expandedUnitIds}
@@ -330,6 +383,9 @@ function TreeNode({
               node={child}
               nodes={[]}
               onAdd={onAdd}
+              onCreatePosition={onCreatePosition}
+              onDeleteAssignment={onDeleteAssignment}
+              onDeletePosition={onDeletePosition}
               onExclude={onExclude}
               onInclude={onInclude}
               onSetAssignment={onSetAssignment}

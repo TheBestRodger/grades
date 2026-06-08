@@ -13,8 +13,18 @@ const statusLabels: Record<string, string> = {
   hr_accepted: "Принят HR",
 };
 
+const HIDDEN_QUESTION_KEYS = new Set(["completion_date"]);
+
 function localDraftStorageKey(profileId: number): string {
   return `grades-profile-draft-v2:${profileId}`;
+}
+
+function currentDateValue(): string {
+  return new Date().toLocaleDateString("ru-RU");
+}
+
+function isHiddenQuestion(question: ProfileQuestion): boolean {
+  return HIDDEN_QUESTION_KEYS.has(question.key);
 }
 
 interface ProfileWorkspaceProps {
@@ -424,11 +434,11 @@ function ProfileField({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="font-semibold text-blue-950">AI-проверка ответа</p>
-              <p className={`mt-1 ${aiEnabled ? "text-blue-800" : "text-amber-900"}`}>
-                {aiEnabled
-                  ? "Отправляется обезличенный пакет: этот вопрос, примеры и ваш ответ."
-                  : "ИИ недоступен. Постарайтесь ответить максимально четко и полно на вопрос."}
-              </p>
+              {!aiEnabled && (
+                <p className="mt-1 text-amber-900">
+                  ИИ недоступен. Постарайтесь ответить максимально четко и полно на вопрос.
+                </p>
+              )}
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
               <button
@@ -558,7 +568,11 @@ export function ProfileWorkspace({
     setUnavailableAiQuestions(new Set());
   }, [profile.id]);
 
-  const sections = useMemo(() => groupQuestionsBySection(profile.questions), [profile.questions]);
+  const visibleQuestions = useMemo(
+    () => profile.questions.filter((question) => !isHiddenQuestion(question)),
+    [profile.questions],
+  );
+  const sections = useMemo(() => groupQuestionsBySection(visibleQuestions), [visibleQuestions]);
   const activeSection = sections[activeSectionIndex] ?? sections[0];
   const aiEnabled = Boolean(ai?.available);
   const questionState = (item: ProfileQuestion) => {
@@ -585,7 +599,7 @@ export function ProfileWorkspace({
     return liveState;
   };
   const completed = useMemo(
-    () => profile.questions.filter((item) => isAcceptedAnswer(questionState(item))).length,
+    () => visibleQuestions.filter((item) => isAcceptedAnswer(questionState(item))).length,
     [
       answers,
       aiAnswerSnapshots,
@@ -594,11 +608,11 @@ export function ProfileWorkspace({
       ignoredAiQuestions,
       profile.answers,
       profile.draft_assisted_sections,
-      profile.questions,
+      visibleQuestions,
       unavailableAiQuestions,
     ],
   );
-  const progress = Math.round((completed / profile.questions.length) * 100);
+  const progress = visibleQuestions.length ? Math.round((completed / visibleQuestions.length) * 100) : 100;
   const latestReturn = profile.review_events.find((event) => event.action === "returned");
 
   function sectionProgress(section: ProfileSection) {
@@ -634,7 +648,9 @@ export function ProfileWorkspace({
   function questionnaireAnswers(): Record<string, string> {
     return Object.fromEntries(
       profile.questions.map((question) => {
-        const value = answers[question.key] ?? "";
+        const value = isHiddenQuestion(question)
+          ? answers[question.key] || currentDateValue()
+          : answers[question.key] ?? "";
         if (
           question.input_type === "single_choice" &&
           value &&
@@ -677,7 +693,7 @@ export function ProfileWorkspace({
       if (checked.has(key) && (answers[key] ?? "") === (profile.answers[key] ?? "")) ignored.add(key);
     });
     const answerStatuses: Record<string, "accepted" | "ignored" | "rejected" | "without_ai"> = {};
-    profile.questions.forEach((question) => {
+    visibleQuestions.forEach((question) => {
       const state = questionState(question);
       if (state === "accepted" || state === "ignored" || state === "rejected" || state === "without_ai") {
         answerStatuses[question.key] = state;
@@ -686,7 +702,7 @@ export function ProfileWorkspace({
     return {
       ai_checked_questions: [...checked],
       ai_ignored_questions: [...ignored],
-      ai_without_ai_questions: profile.questions
+      ai_without_ai_questions: visibleQuestions
         .filter((question) => {
           if (questionState(question) !== "without_ai") return false;
           return isQuestionFilled(question, answers[question.key]);
@@ -758,7 +774,7 @@ export function ProfileWorkspace({
   }
 
   async function startSubmit() {
-    const missing = profile.questions.find((item) => !isAcceptedAnswer(questionState(item)));
+    const missing = visibleQuestions.find((item) => !isAcceptedAnswer(questionState(item)));
     if (missing) {
       const sectionIndex = sections.findIndex((section) =>
         section.questions.some((item) => item.key === missing.key),
@@ -826,7 +842,7 @@ export function ProfileWorkspace({
             <div className="h-2 rounded-full bg-blue-800 transition-all" style={{ width: `${progress}%` }} />
           </div>
           <p className="mt-2 text-xs text-slate-500">
-            Заполнено {completed} из {profile.questions.length} полей шаблона
+            Заполнено {completed} из {visibleQuestions.length} полей шаблона
           </p>
         </div>
       </div>

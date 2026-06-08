@@ -359,8 +359,11 @@ PROFILE_QUESTIONS = [
     },
 ]
 QUESTION_KEYS = {question["key"] for question in PROFILE_QUESTIONS}
+SYSTEM_QUESTION_KEYS = {"completion_date"}
 AI_CHECKABLE_QUESTION_KEYS = {
-    question["key"] for question in PROFILE_QUESTIONS if question["input_type"] != "single_choice"
+    question["key"]
+    for question in PROFILE_QUESTIONS
+    if question["input_type"] != "single_choice" and question["key"] not in SYSTEM_QUESTION_KEYS
 }
 EDITABLE_STATUSES = {"not_started", "draft", "submitted", "returned_for_revision"}
 
@@ -519,7 +522,13 @@ def _answers_from_draft(profile: EmployeeProfile) -> dict[str, str]:
 def _answers_for_profile(profile: EmployeeProfile) -> dict[str, str]:
     answers = _prefilled_section_one_answers(profile)
     answers.update(_answers_from_draft(profile))
-    return answers
+    return _with_system_answers(answers)
+
+
+def _with_system_answers(answers: dict[str, str]) -> dict[str, str]:
+    next_answers = dict(answers)
+    next_answers["completion_date"] = _now().strftime("%d.%m.%Y")
+    return next_answers
 
 
 def _prefilled_section_one_answers(profile: EmployeeProfile) -> dict[str, str]:
@@ -640,9 +649,11 @@ def _progress(answers: dict[str, str]) -> float:
     completed = sum(
         1
         for question in PROFILE_QUESTIONS
+        if question["key"] not in SYSTEM_QUESTION_KEYS
         if _is_answer_filled(question, answers.get(question["key"], ""))
     )
-    return round(completed / len(PROFILE_QUESTIONS) * 100, 2)
+    total = len(PROFILE_QUESTIONS) - len(SYSTEM_QUESTION_KEYS)
+    return round(completed / total * 100, 2)
 
 
 def _get_owned_profile(session: Session, actor: Employee, profile_id: int) -> EmployeeProfile:
@@ -798,7 +809,7 @@ def save_draft(
     if unknown_keys:
         raise ProfileOperationError("Переданы неизвестные разделы анкеты.")
 
-    answers = {key: request.answers.get(key, "") for key in QUESTION_KEYS}
+    answers = _with_system_answers({key: request.answers.get(key, "") for key in QUESTION_KEYS})
     _validate_answers(answers)
     now = _now()
     assistant_payload = _assistant_payload(request, assistant_mode)
@@ -847,7 +858,7 @@ def submit_profile(
     unknown_keys = set(request.answers) - QUESTION_KEYS
     if unknown_keys:
         raise ProfileOperationError("Переданы неизвестные разделы анкеты.")
-    answers = {key: request.answers.get(key, "") for key in QUESTION_KEYS}
+    answers = _with_system_answers({key: request.answers.get(key, "") for key in QUESTION_KEYS})
     _validate_answers(answers)
     missing = [
         question["title"]

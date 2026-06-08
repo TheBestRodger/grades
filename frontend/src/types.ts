@@ -246,6 +246,17 @@ export interface WorkStaffingLineResult {
   remaining_fte: number;
 }
 
+export interface StructureDeleteResult {
+  scope: "work";
+  assignment_id?: number;
+  staffing_line_id?: number;
+  deleted_assignments: number;
+  deleted_participants: number;
+  deleted_profiles: number;
+  deactivated_employees: number;
+  document_links_deleted?: number;
+}
+
 export interface Campaign {
   id: number;
   scope: "demo" | "work";

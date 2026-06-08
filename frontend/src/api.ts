@@ -27,7 +27,18 @@ import type {
   WorkEmployeeImportResult,
   WorkStaffingLineInput,
   WorkStaffingLineResult,
+  StructureDeleteResult,
 } from "./types";
+
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
 
 function storedAuthToken(): string | null {
   return window.localStorage.getItem("auth_token");
@@ -42,7 +53,7 @@ function authHeaders(): Record<string, string> {
 
 async function request<T>(
   url: string,
-  options: { userId?: number; method?: "GET" | "POST" | "PUT"; body?: unknown } = {},
+  options: { userId?: number; method?: "DELETE" | "GET" | "POST" | "PUT"; body?: unknown } = {},
 ): Promise<T> {
   const response = await fetch(url, {
     method: options.method ?? "GET",
@@ -54,7 +65,7 @@ async function request<T>(
   });
   if (!response.ok) {
     const payload = (await response.json().catch(() => null)) as { detail?: string } | null;
-    throw new Error(payload?.detail ?? `Request failed: ${response.status}`);
+    throw new ApiError(payload?.detail ?? `Request failed: ${response.status}`, response.status);
   }
   return (await response.json()) as T;
 }
@@ -147,6 +158,16 @@ export const createWorkStaffingLine = (
     userId,
     method: "POST",
     body: payload,
+  });
+export const deleteWorkAssignment = (userId: number, assignmentId: number, force = false) =>
+  request<StructureDeleteResult>(`/api/work/hr/assignments/${assignmentId}${force ? "?force=true" : ""}`, {
+    userId,
+    method: "DELETE",
+  });
+export const deleteWorkStaffingLine = (userId: number, staffingLineId: number, force = false) =>
+  request<StructureDeleteResult>(`/api/work/hr/staffing-lines/${staffingLineId}${force ? "?force=true" : ""}`, {
+    userId,
+    method: "DELETE",
   });
 export const getCampaigns = (userId: number, scope: "demo" | "work" = "demo") =>
   request<Campaign[]>(scope === "work" ? "/api/work/hr/campaigns" : "/api/hr/campaigns", { userId });

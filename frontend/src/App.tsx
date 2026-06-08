@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 
 import {
+  ApiError,
   bulkAddEmployees,
   bulkReturnProfilesByHr,
   bulkReturnProfilesForRevision,
@@ -9,6 +10,9 @@ import {
   checkProfileAnswer,
   createCampaign,
   createCampaignWave,
+  createWorkStaffingLine,
+  deleteWorkAssignment,
+  deleteWorkStaffingLine,
   downloadWorkDocumentSource,
   downloadHrExport,
   downloadProfileTemplateExport,
@@ -57,6 +61,7 @@ import {
   CampaignPanel,
   DemoResetPanel,
   EmployeeModal,
+  StaffingLineModal,
 } from "./HrControls";
 import { HrAnalyticsPanel } from "./HrAnalyticsPanel";
 import { HrReviewPanel } from "./HrReviewPanel";
@@ -69,11 +74,13 @@ import type {
   Campaign,
   DemoUser,
   EmployeeProfile,
+  Assignment,
   NewEmployee,
   OrgNode,
   Position,
   Summary,
   AiAnswerCheckResult,
+  WorkStaffingLineInput,
 } from "./types";
 
 type ProfileAiUsagePayload = {
@@ -106,6 +113,14 @@ type SectionId =
   | "export";
 
 type DataScope = "demo" | "work";
+
+type StructureDeleteTarget = {
+  kind: "assignment" | "position";
+  id: number;
+  label: string;
+  force: boolean;
+  warning: string | null;
+};
 
 interface NavItem {
   id: SectionId;
@@ -333,6 +348,67 @@ function WorkContourPlaceholder() {
   );
 }
 
+function StructureDeleteConfirm({
+  error,
+  isDeleting,
+  target,
+  onCancel,
+  onConfirm,
+}: {
+  error: string | null;
+  isDeleting: boolean;
+  target: StructureDeleteTarget | null;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  if (!target) return null;
+  const isPosition = target.kind === "position";
+  return (
+    <div className="fixed inset-0 z-30 grid place-items-center bg-slate-950/40 px-4">
+      <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-red-700">
+          HR: изменение структуры
+        </p>
+        <h3 className="mt-2 text-xl font-bold text-slate-950">
+          {isPosition ? "Удалить штатную единицу?" : "Удалить сотрудника из структуры?"}
+        </h3>
+        <p className="mt-3 text-sm text-slate-600">
+          {target.label}
+        </p>
+        {target.warning ? (
+          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            <p className="font-semibold">Объект участвует в активной волне</p>
+            <p className="mt-1">{target.warning}</p>
+          </div>
+        ) : (
+          <p className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            Если у объекта есть анкеты или участие в кампаниях, они будут удалены из отчетов после подтверждения.
+          </p>
+        )}
+        {error && <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
+        <div className="mt-6 flex flex-wrap justify-end gap-3">
+          <button
+            className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            disabled={isDeleting}
+            onClick={onCancel}
+            type="button"
+          >
+            Отмена
+          </button>
+          <button
+            className="rounded-xl bg-red-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-red-600 disabled:opacity-50"
+            disabled={isDeleting}
+            onClick={onConfirm}
+            type="button"
+          >
+            {isDeleting ? "Удаляю..." : target.warning ? "Подтвердить удаление" : "Удалить"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const queryClient = useQueryClient();
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
@@ -514,6 +590,8 @@ export default function App() {
   const [aiAnswerSnapshots, setAiAnswerSnapshots] = useState<Record<string, string>>({});
   const [credentialsFileBlob, setCredentialsFileBlob] = useState<Blob | null>(null);
   const [preparingCredentials, setPreparingCredentials] = useState(false);
+  const [staffingLineTarget, setStaffingLineTarget] = useState<OrgNode | null>(null);
+  const [structureDeleteTarget, setStructureDeleteTarget] = useState<StructureDeleteTarget | null>(null);
 
   const logoutMutation = useMutation({
     mutationFn: logoutAuth,
@@ -624,6 +702,33 @@ export default function App() {
       setCredentialsFileBlob(null);
       setEmployeeTarget(null);
       await refreshHrViews();
+    },
+  });
+  const createStaffingLineMutation = useMutation({
+    mutationFn: (payload: WorkStaffingLineInput) =>
+      createWorkStaffingLine(selectedUserId!, staffingLineTarget!.id, payload),
+    onSuccess: async (result) => {
+      setOperationMessage(`Создана штатная единица «${result.staffing_title}».`);
+      setStaffingLineTarget(null);
+      await refreshHrViews();
+    },
+  });
+  const deleteStructureMutation = useMutation({
+    mutationFn: (target: StructureDeleteTarget) =>
+      target.kind === "assignment"
+        ? deleteWorkAssignment(selectedUserId!, target.id, target.force)
+        : deleteWorkStaffingLine(selectedUserId!, target.id, target.force),
+    onSuccess: async (result) => {
+      setOperationMessage(
+        `Структура обновлена: удалено назначений ${result.deleted_assignments}, анкет ${result.deleted_profiles}.`,
+      );
+      setStructureDeleteTarget(null);
+      await refreshHrViews();
+    },
+    onError: (error, target) => {
+      if (error instanceof ApiError && error.status === 409) {
+        setStructureDeleteTarget({ ...target, force: true, warning: error.message });
+      }
     },
   });
   const demoResetMutation = useMutation({
@@ -975,6 +1080,38 @@ export default function App() {
     setEmployeeTarget(position);
   }
 
+  function openStaffingLineModal(unit: OrgNode) {
+    createStaffingLineMutation.reset();
+    setStaffingLineTarget(unit);
+  }
+
+  function requestDeleteAssignment(assignment: Assignment, position: Position) {
+    deleteStructureMutation.reset();
+    setStructureDeleteTarget({
+      kind: "assignment",
+      id: assignment.id,
+      label: `${assignment.employee_name} / ${position.title}`,
+      force: false,
+      warning: null,
+    });
+  }
+
+  function requestDeletePosition(position: Position) {
+    deleteStructureMutation.reset();
+    setStructureDeleteTarget({
+      kind: "position",
+      id: position.id,
+      label: position.title,
+      force: false,
+      warning: null,
+    });
+  }
+
+  function confirmStructureDelete() {
+    if (!structureDeleteTarget) return;
+    deleteStructureMutation.mutate(structureDeleteTarget);
+  }
+
   async function savePersonalDraft(
     profileId: number,
     answers: Record<string, string>,
@@ -1307,13 +1444,17 @@ export default function App() {
               {workTree.error && <p className="text-red-700">Не удалось загрузить рабочую структуру.</p>}
               {workTree.data && (
                 <OrganizationTreePanel
-                  activeCampaign={activeCampaignForTree}
-                  canAddEmployees={Boolean(!activeCampaignForTree || activeWave?.can_edit)}
-                  canManage={Boolean(activeCampaignForTree && activeWave?.can_edit)}
-                  excludingUnitId={excludingUnitId}
-                  includingUnitId={includingUnitId}
+                  activeCampaign={null}
+                  canAddEmployees
+                  canEditStructure
+                  canManage={false}
+                  excludingUnitId={null}
+                  includingUnitId={null}
                   nodes={workTree.data.nodes}
                   onAdd={openEmployeeModal}
+                  onCreatePosition={openStaffingLineModal}
+                  onDeleteAssignment={requestDeleteAssignment}
+                  onDeletePosition={requestDeletePosition}
                   onExclude={excludeUnit}
                   onInclude={includeUnit}
                   onSetAssignment={setAssignmentParticipation}
@@ -1688,6 +1829,30 @@ export default function App() {
           onClose={() => setEmployeeTarget(null)}
           onSave={(rows) => addEmployeesMutation.mutate(rows)}
           target={employeeTarget}
+        />
+      )}
+      {isHr && (
+        <StaffingLineModal
+          error={createStaffingLineMutation.error?.message ?? null}
+          isSaving={createStaffingLineMutation.isPending}
+          onClose={() => setStaffingLineTarget(null)}
+          onSave={(payload) => createStaffingLineMutation.mutate(payload)}
+          target={staffingLineTarget}
+        />
+      )}
+      {isHr && (
+        <StructureDeleteConfirm
+          error={
+            structureDeleteTarget?.warning
+              ? null
+              : deleteStructureMutation.error instanceof Error
+                ? deleteStructureMutation.error.message
+                : null
+          }
+          isDeleting={deleteStructureMutation.isPending}
+          onCancel={() => setStructureDeleteTarget(null)}
+          onConfirm={confirmStructureDelete}
+          target={structureDeleteTarget}
         />
       )}
     </main>
