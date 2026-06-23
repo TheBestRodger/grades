@@ -7,11 +7,12 @@ from fastapi import Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from typing import Any
-from ..auth_operations import AuthOperationError, actor_from_authorization
-from ..config import Settings
-from ..db import Database
+from ..features.auth.errors import AuthOperationError
+from ..features.auth.service import actor_from_authorization
+from ..core.config import Settings
+from ..core.db import Database
 from ..models import Employee
-from ..organization import require_actor
+from ..features.organization.service import require_actor
 
 
 def get_database(request: Request) -> Database:
@@ -60,7 +61,7 @@ def current_actor(
 
 
 def current_hr(actor: Employee = Depends(current_actor)) -> Employee:
-    if actor.system_role != "hr":
+    if actor.system_role != "hr" and not actor.is_hr:
         raise HTTPException(status_code=403, detail="HR access is required.")
     return actor
 

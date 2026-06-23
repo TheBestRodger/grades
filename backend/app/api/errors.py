@@ -5,22 +5,22 @@ from typing import TypeVar
 
 from fastapi import HTTPException
 
-from ..ai_profile_checks import AiProfileCheckError
-from ..auth_operations import AuthOperationError
-from ..demo_reset import DemoResetError
-from ..document_operations import DocumentOperationError
-from ..export_operations import ExportOperationError
-from ..hr_operations import HrOperationError
-from ..hr_review_operations import HrReviewOperationError
-from ..manager_overview import ManagerOverviewError
-from ..profile_operations import ProfileOperationError
-from ..review_operations import ReviewOperationError
-from ..work_employee_import import WorkEmployeeImportError
+from ..features.profiles.errors import AiProfileCheckError
+from ..features.auth.errors import AuthOperationError
+from ..features.campaigns.errors import CampaignOperationError
+from ..features.settings.demo_reset import DemoResetError
+from ..features.hr_reviews.errors import HrReviewOperationError
+from ..features.profiles.errors import ProfileOperationError
+from ..features.manager_reviews.errors import ReviewOperationError
+from ..features.documents.errors import DocumentOperationError
+from ..features.exports.errors import ExportOperationError
+from ..features.analytics.errors import ManagerOverviewError
+from ..features.imports.work_employee import WorkEmployeeImportError
+from ..features.notifications.errors import NotificationOperationError
 
 T = TypeVar("T")
 OperationError = (
-    HrOperationError
-    | ProfileOperationError
+    ProfileOperationError
     | ReviewOperationError
     | HrReviewOperationError
     | ManagerOverviewError
@@ -30,6 +30,8 @@ OperationError = (
     | WorkEmployeeImportError
     | AuthOperationError
     | AiProfileCheckError
+    | CampaignOperationError
+    | NotificationOperationError
 )
 
 
@@ -37,7 +39,6 @@ def run_operation(operation: Callable[[], T]) -> T:
     try:
         return operation()
     except (
-        HrOperationError,
         ProfileOperationError,
         ReviewOperationError,
         HrReviewOperationError,
@@ -48,5 +49,7 @@ def run_operation(operation: Callable[[], T]) -> T:
         WorkEmployeeImportError,
         AuthOperationError,
         AiProfileCheckError,
+        CampaignOperationError,
+        NotificationOperationError,
     ) as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc

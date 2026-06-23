@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Index, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -49,11 +49,12 @@ class Employee(Base):
     external_employee_id: Mapped[str | None] = mapped_column(String(100), unique=True)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
-    username: Mapped[str | None] = mapped_column(String(100), unique=True)
+    username: Mapped[str | None] = mapped_column(String(255), unique=True)
     password_hash: Mapped[str | None] = mapped_column(String(255))
     first_login_at: Mapped[datetime | None] = mapped_column(DateTime)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime)
     system_role: Mapped[str] = mapped_column(String(32), nullable=False)
+    is_hr: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_demo: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
@@ -64,10 +65,18 @@ class Employee(Base):
     )
     auth_login_tokens: Mapped[list["AuthLoginToken"]] = relationship(back_populates="employee")
     auth_sessions: Mapped[list["AuthSession"]] = relationship(back_populates="employee")
+    notifications: Mapped[list["Notification"]] = relationship(
+        back_populates="recipient",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
 
 class AuthLoginToken(Base):
     __tablename__ = "auth_login_tokens"
+    __table_args__ = (
+        Index("ix_auth_login_tokens_employee_expires", "employee_id", "expires_at"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id"), nullable=False)
@@ -81,6 +90,9 @@ class AuthLoginToken(Base):
 
 class AuthSession(Base):
     __tablename__ = "auth_sessions"
+    __table_args__ = (
+        Index("ix_auth_sessions_employee_expires", "employee_id", "expires_at"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id"), nullable=False)
@@ -150,6 +162,9 @@ class Assignment(Base):
 
 class Campaign(Base):
     __tablename__ = "campaigns"
+    __table_args__ = (
+        Index("ix_campaigns_demo_status_id", "is_demo", "status", "id"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -176,6 +191,9 @@ class Campaign(Base):
 
 class CampaignWave(Base):
     __tablename__ = "campaign_waves"
+    __table_args__ = (
+        Index("ix_campaign_waves_campaign_status", "campaign_id", "status"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     campaign_id: Mapped[int] = mapped_column(ForeignKey("campaigns.id"), nullable=False)
@@ -218,6 +236,18 @@ class CampaignParticipant(Base):
     __tablename__ = "campaign_participants"
     __table_args__ = (
         UniqueConstraint("campaign_id", "assignment_id", name="uq_campaign_assignment"),
+        Index(
+            "ix_campaign_participants_campaign_status",
+            "campaign_id",
+            "participation_status",
+            "expected_to_submit",
+        ),
+        Index(
+            "ix_campaign_participants_assignment_status",
+            "assignment_id",
+            "participation_status",
+            "expected_to_submit",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -241,6 +271,9 @@ class CampaignParticipant(Base):
 
 class EmployeeProfile(Base):
     __tablename__ = "employee_profiles"
+    __table_args__ = (
+        Index("ix_employee_profiles_workflow_status", "workflow_status"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     campaign_participant_id: Mapped[int] = mapped_column(
@@ -335,6 +368,10 @@ class ProfileReviewEvent(Base):
 
 class Document(Base):
     __tablename__ = "documents"
+    __table_args__ = (
+        Index("ix_documents_demo_type_code", "is_demo", "document_type", "document_code"),
+        Index("ix_documents_demo_checksum", "is_demo", "checksum"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     document_code: Mapped[str] = mapped_column(String(80), nullable=False, unique=True)
@@ -360,6 +397,8 @@ class DocumentLink(Base):
     __tablename__ = "document_links"
     __table_args__ = (
         UniqueConstraint("document_id", "target_type", "target_id", name="uq_document_target"),
+        Index("ix_document_links_target_demo", "target_type", "target_id", "is_demo"),
+        Index("ix_document_links_document_status", "document_id", "link_status"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -373,6 +412,30 @@ class DocumentLink(Base):
 
     document: Mapped[Document] = relationship(back_populates="links")
     confirmed_by: Mapped[Employee | None] = relationship()
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    __table_args__ = (
+        Index("ix_notifications_recipient_read_created", "recipient_employee_id", "read_at", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    recipient_employee_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    notification_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    entity_type: Mapped[str | None] = mapped_column(String(80))
+    entity_id: Mapped[str | None] = mapped_column(String(80))
+    target_section: Mapped[str | None] = mapped_column(String(80))
+    dedupe_key: Mapped[str | None] = mapped_column(String(255), unique=True)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+    recipient: Mapped[Employee] = relationship(back_populates="notifications")
 
 
 class AuditEvent(Base):

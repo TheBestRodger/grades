@@ -6,6 +6,7 @@ backend/data/*.sqlite
 backend/data/*.sqlite-*
 backend/.env
 frontend/node_modules/
+frontend/coverage/
 frontend/dist/
 *.log
 release/

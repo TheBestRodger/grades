@@ -1,0 +1,1 @@
+"""Structure management feature module."""
