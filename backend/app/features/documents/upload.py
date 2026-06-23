@@ -43,46 +43,70 @@ def upload_work_document(
     )
     checksum = sha256(content).hexdigest()
     duplicate = session.scalar(
-        select(Document).where(Document.is_demo.is_(False), Document.checksum == checksum)
+        select(Document).where(
+            Document.is_demo.is_(False), Document.checksum == checksum
+        )
     )
     if duplicate is not None:
-        raise DocumentOperationError("Этот оригинал уже загружен в рабочий реестр.", 409)
+        raise DocumentOperationError(
+            "Этот оригинал уже загружен в рабочий реестр.", 409
+        )
 
     try:
         extracted_text, extraction_method = extract_initial_text(content, suffix)
     except DocumentFileError as exc:
         raise DocumentOperationError(exc.message) from exc
 
-    original_path = _store_original(storage_dir, document_code, checksum, suffix, content)
-    document = _create_document(
-        document_code=document_code,
-        document_type=document_type,
-        title=title,
-        version=version,
-        checksum=checksum,
-        original_path=original_path,
-        extracted_text=extracted_text,
+    original_path = _store_original(
+        storage_dir, document_code, checksum, suffix, content
     )
-    session.add(document)
-    session.flush()
-    if extracted_text:
-        document.extracted_text_path = str(
-            store_text_snapshot(storage_dir, document.document_code, checksum, extracted_text)
+    text_snapshot_path: Path | None = None
+    try:
+        document = _create_document(
+            document_code=document_code,
+            document_type=document_type,
+            title=title,
+            version=version,
+            checksum=checksum,
+            original_path=original_path,
+            extracted_text=extracted_text,
         )
-    _audit_upload(session, actor, document, filename, checksum, len(content), extraction_method)
-    notify_hr_users(
-        session,
-        is_demo=False,
-        notification_type="document_uploaded",
-        title="Загружен новый документ",
-        message=f"В реестр добавлен документ «{document.title}» ({document.document_code}).",
-        target_section="documents",
-        entity_type="document",
-        entity_id=document.id,
-        dedupe_key=f"document-uploaded:{document.id}",
-        exclude_employee_id=actor.id,
-    )
-    session.flush()
+        session.add(document)
+        session.flush()
+        if extracted_text:
+            text_snapshot_path = store_text_snapshot(
+                storage_dir, document.document_code, checksum, extracted_text
+            )
+            document.extracted_text_path = str(text_snapshot_path)
+        _audit_upload(
+            session,
+            actor,
+            document,
+            filename,
+            checksum,
+            len(content),
+            extraction_method,
+        )
+        notify_hr_users(
+            session,
+            is_demo=False,
+            notification_type="document_uploaded",
+            title="Загружен новый документ",
+            message=f"В реестр добавлен документ «{document.title}» ({document.document_code}).",
+            target_section="documents",
+            entity_type="document",
+            entity_id=document.id,
+            dedupe_key=f"document-uploaded:{document.id}",
+            exclude_employee_id=actor.id,
+        )
+        session.flush()
+    except Exception as exc:
+        _cleanup_upload_files(original_path, text_snapshot_path)
+        if isinstance(exc, DocumentOperationError):
+            raise
+        raise DocumentOperationError(
+            "Не удалось сохранить файл документа. Повторите загрузку."
+        ) from exc
     return get_document_registry(session, is_demo=False)
 
 
@@ -105,7 +129,9 @@ def _validate_upload(
     if not document_code or len(document_code) > 80:
         raise DocumentOperationError("Укажите код документа длиной до 80 символов.")
     if not title or len(title) > 255:
-        raise DocumentOperationError("Укажите название документа длиной до 255 символов.")
+        raise DocumentOperationError(
+            "Укажите название документа длиной до 255 символов."
+        )
     if not version or len(version) > 80:
         raise DocumentOperationError("Укажите версию документа длиной до 80 символов.")
     if suffix not in UPLOAD_EXTENSIONS:
@@ -114,7 +140,10 @@ def _validate_upload(
         raise DocumentOperationError("Файл пуст.")
     if len(content) > MAX_UPLOAD_BYTES:
         raise DocumentOperationError("Размер файла превышает 25 МБ.")
-    if session.scalar(select(Document).where(Document.document_code == document_code)) is not None:
+    if (
+        session.scalar(select(Document).where(Document.document_code == document_code))
+        is not None
+    ):
         raise DocumentOperationError("Документ с таким кодом уже существует.", 409)
     return document_code, title, version, suffix
 
@@ -128,12 +157,16 @@ def _store_original(
 ) -> Path:
     original_dir = storage_dir.resolve() / "originals"
     original_dir.mkdir(parents=True, exist_ok=True)
-    original_path = original_dir / f"{storage_token(document_code)}__{checksum[:12]}{suffix}"
+    original_path = (
+        original_dir / f"{storage_token(document_code)}__{checksum[:12]}{suffix}"
+    )
     try:
         with original_path.open("xb") as source_file:
             source_file.write(content)
     except FileExistsError as exc:
-        raise DocumentOperationError("Оригинал с таким кодом и содержимым уже сохранён.", 409) from exc
+        raise DocumentOperationError(
+            "Оригинал с таким кодом и содержимым уже сохранён.", 409
+        ) from exc
     return original_path
 
 
@@ -193,3 +226,13 @@ def _audit_upload(
             ),
         )
     )
+
+
+def _cleanup_upload_files(*paths: Path | None) -> None:
+    for path in paths:
+        if path is None:
+            continue
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
