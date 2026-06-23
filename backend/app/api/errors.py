@@ -16,6 +16,7 @@ from ..features.documents.errors import DocumentOperationError
 from ..features.exports.errors import ExportOperationError
 from ..features.analytics.errors import ManagerOverviewError
 from ..features.imports.work_employee import WorkEmployeeImportError
+from ..features.structure.errors import StructureOperationError
 from ..features.notifications.errors import NotificationOperationError
 
 T = TypeVar("T")
@@ -28,6 +29,7 @@ OperationError = (
     | DocumentOperationError
     | DemoResetError
     | WorkEmployeeImportError
+    | StructureOperationError
     | AuthOperationError
     | AiProfileCheckError
     | CampaignOperationError
@@ -47,6 +49,7 @@ def run_operation(operation: Callable[[], T]) -> T:
         DocumentOperationError,
         DemoResetError,
         WorkEmployeeImportError,
+        StructureOperationError,
         AuthOperationError,
         AiProfileCheckError,
         CampaignOperationError,

@@ -66,6 +66,16 @@ def assess_profile_answer(
             "ИИ-помощник временно недоступен. Повторите позже.", 503
         ) from exc
 
+    try:
+        clarity_percent = int(result.get("clarity_percent", 0))
+    except (TypeError, ValueError) as exc:
+        raise AiProfileCheckError(
+            "ИИ-помощник вернул некорректный ответ.", 502
+        ) from exc
+    status = result.get("status")
+    if status not in {"accepted", "needs_clarification"}:
+        raise AiProfileCheckError("ИИ-помощник вернул некорректный ответ.", 502)
+
     audit_profile_event(
         session,
         actor,
@@ -75,16 +85,13 @@ def assess_profile_answer(
             "question_key": request.question_key,
             "provider": result.get("provider"),
             "model": result.get("model"),
-            "clarity_percent": result.get("clarity_percent"),
-            "status": result.get("status"),
+            "clarity_percent": clarity_percent,
+            "status": status,
             "clarity_threshold": clarity_threshold,
             "pii_policy": "no_employee_name_email_or_external_ids",
         },
     )
-    accepted = (
-        int(result.get("clarity_percent", 0)) >= clarity_threshold
-        and result.get("status") == "accepted"
-    )
+    accepted = clarity_percent >= clarity_threshold and status == "accepted"
     if accepted:
         result["followup_question"] = ""
     return {
