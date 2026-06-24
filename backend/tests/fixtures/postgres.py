@@ -9,18 +9,41 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.exc import SQLAlchemyError
 
-
 DEFAULT_TEST_DATABASE_URL = (
     "postgresql+psycopg://grades_mgtu:grades_mgtu@127.0.0.1:6432/postgres"
 )
 
 
+def _test_database_url() -> str:
+    explicit_url = os.environ.get("BACKEND_TEST_DATABASE_URL")
+    if explicit_url:
+        return explicit_url
+
+    runtime_url = os.environ.get("DATABASE_URL")
+    if runtime_url and make_url(runtime_url).drivername.startswith("postgresql"):
+        return runtime_url
+
+    user = os.environ.get("POSTGRES_USER")
+    password = os.environ.get("POSTGRES_PASSWORD")
+    database = os.environ.get("POSTGRES_DB", "postgres")
+    if user and password:
+        host = os.environ.get("POSTGRES_HOST", "127.0.0.1")
+        port = os.environ.get("POSTGRES_PORT", "5432")
+        return f"postgresql+psycopg://{user}:{password}@{host}:{port}/{database}"
+
+    return DEFAULT_TEST_DATABASE_URL
+
+
 def _maintenance_url() -> URL:
-    raw_url = os.environ.get("BACKEND_TEST_DATABASE_URL", DEFAULT_TEST_DATABASE_URL)
+    raw_url = _test_database_url()
     url = make_url(raw_url)
     if not url.drivername.startswith("postgresql"):
         pytest.skip("B10 API/integration tests require PostgreSQL test database URL.")
-    return url.set(database=os.environ.get("BACKEND_TEST_MAINTENANCE_DB", url.database or "postgres"))
+    return url.set(
+        database=os.environ.get(
+            "BACKEND_TEST_MAINTENANCE_DB", url.database or "postgres"
+        )
+    )
 
 
 def _quote_database_name(name: str) -> str:
@@ -49,14 +72,12 @@ def postgres_database_url() -> Iterator[str]:
         try:
             with admin_engine.connect() as connection:
                 connection.execute(
-                    text(
-                        """
+                    text("""
                         SELECT pg_terminate_backend(pid)
                         FROM pg_stat_activity
                         WHERE datname = :database_name
                           AND pid <> pg_backend_pid()
-                        """
-                    ),
+                        """),
                     {"database_name": db_name},
                 )
                 connection.execute(text(f"DROP DATABASE IF EXISTS {quoted_db_name}"))

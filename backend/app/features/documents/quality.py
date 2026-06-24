@@ -23,7 +23,9 @@ def review_work_document_quality(
 ) -> dict[str, object]:
     document = _work_document(session, document_id)
     if request.ocr_quality_status == "good" and not request.extracted_text:
-        raise DocumentOperationError("Для подтверждения качества внесите текст документа.")
+        raise DocumentOperationError(
+            "Для подтверждения качества внесите текст документа."
+        )
 
     before_status = document.ocr_quality_status
     before_text_hash = (
@@ -35,13 +37,25 @@ def review_work_document_quality(
     document.ocr_quality_status = request.ocr_quality_status
     if request.extracted_text:
         text_hash = sha256(request.extracted_text.encode("utf-8")).hexdigest()
-        document.extracted_text_path = str(
-            store_text_snapshot(storage_dir, document.document_code, text_hash, request.extracted_text)
-        )
+        try:
+            document.extracted_text_path = str(
+                store_text_snapshot(
+                    storage_dir,
+                    document.document_code,
+                    text_hash,
+                    request.extracted_text,
+                )
+            )
+        except OSError as exc:
+            raise DocumentOperationError(
+                "Не удалось сохранить распознанный текст документа."
+            ) from exc
     else:
         text_hash = None
         document.extracted_text_path = None
-    _audit_quality_review(session, actor, document, before_status, before_text_hash, text_hash)
+    _audit_quality_review(
+        session, actor, document, before_status, before_text_hash, text_hash
+    )
     session.flush()
     return get_document_registry(session, is_demo=False)
 
@@ -53,7 +67,9 @@ def get_work_document_source(
 ) -> tuple[bytes, str, str]:
     document = _work_document(session, document_id)
     if not document.checksum or not document.source_file_path:
-        raise DocumentOperationError("Для импортированной связи оригинал ещё не загружен.", 404)
+        raise DocumentOperationError(
+            "Для импортированной связи оригинал ещё не загружен.", 404
+        )
     source_path = Path(document.source_file_path).resolve()
     originals_dir = (storage_dir.resolve() / "originals").resolve()
     if originals_dir not in source_path.parents or not source_path.is_file():
@@ -64,8 +80,12 @@ def get_work_document_source(
         ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         ".pdf": "application/pdf",
     }
+    try:
+        content = source_path.read_bytes()
+    except OSError as exc:
+        raise DocumentOperationError("Оригинал документа недоступен.", 404) from exc
     return (
-        source_path.read_bytes(),
+        content,
         source_path.name,
         media_types.get(source_path.suffix.lower(), "application/octet-stream"),
     )
@@ -109,4 +129,3 @@ def _audit_quality_review(
             ),
         )
     )
-
