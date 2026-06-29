@@ -7,7 +7,7 @@ from fastapi import Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from typing import Any
-from ..features.auth.errors import AuthOperationError
+from .errors import run_operation
 from ..features.auth.service import actor_from_authorization
 from ..core.config import Settings
 from ..core.db import Database
@@ -42,10 +42,9 @@ def current_actor(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> Employee:
-    try:
-        session_actor = actor_from_authorization(session, authorization)
-    except AuthOperationError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+    session_actor = run_operation(
+        lambda: actor_from_authorization(session, authorization)
+    )
     if session_actor is not None:
         return session_actor
     if settings.app_env not in {"demo-local", "test"}:
